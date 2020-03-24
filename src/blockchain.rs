@@ -38,7 +38,7 @@ impl Blockchain {
         };
         content_genesis.content.push(signed);
 
-        let diff_h256: H256 = hex!("0010000000000000000000000000000000000000000000000000000000000000").into();
+        let diff_h256: H256 = hex!("0001000000000000000000000000000000000000000000000000000000000000").into();
         let zero_nonce: u32 = 0;
         let phash: H256 = hex!("0000000000000000000000000000000000000000000000000000000000000000").into();
         let head_rand = Header{

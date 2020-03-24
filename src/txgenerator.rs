@@ -42,7 +42,9 @@ pub struct Context {
     key: Ed25519KeyPair,
     public: Vec<u8>,
     address: H160,
-    state: Arc<Mutex<HashMap<H160,(u32, u32)>>>,
+    init_state: Arc<Mutex<HashMap<H160,(u32, u32)>>>,
+    block_state:Arc<Mutex<HashMap<H256,HashMap<H160,(u32,u32)>>>>,
+    blockchain: Arc<Mutex<Blockchain>>,
 }
 
 #[derive(Clone)]
@@ -78,6 +80,7 @@ impl TxMempool{
             index += 1;
         }
         curr_buf.remove(index);
+        println!("Poped tx : {:?}", signed_transaction.hash());
         let mut curr_map = &mut self.map;
         curr_map.remove(&signed_transaction.hash());
     }
@@ -103,12 +106,16 @@ pub fn new(
     tx_pool: &Arc<Mutex<TxMempool>>,
     key: Ed25519KeyPair,
     state: &Arc<Mutex<HashMap<H160,(u32, u32)>>>,
+    block_state: &Arc<Mutex<HashMap<H256,HashMap<H160,(u32,u32)>>>>,
+    blockchain: &Arc<Mutex<Blockchain>>,
 ) -> (Context, Handle) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let mempool_buf = tx_pool.clone();
     let trusted_public = key.public_key().as_ref().to_vec();
     let public_hash: H256 = ring::digest::digest(&ring::digest::SHA256, &trusted_public).into();
     let address: H160 = public_hash.into();
+    let mut block_state = block_state.clone();
+    let blockchain = blockchain.clone();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
@@ -117,7 +124,9 @@ pub fn new(
         key: key,
         public: trusted_public,
         address: address,
-        state: state.clone(),
+        init_state: state.clone(),
+        block_state: block_state,
+        blockchain: blockchain,
     };
 
     let handle = Handle {
@@ -165,9 +174,10 @@ impl Context {
     }
     fn generate_loop(&mut self) {
         let mut count  = 1;
+
         // main mining loop
         loop {
-            // check and react to control signals
+            //check and react to control signals
             match self.operating_state {
                 OperatingState::Paused => {
                     let signal = self.control_chan.recv().unwrap();
@@ -188,26 +198,31 @@ impl Context {
             if let OperatingState::ShutDown = self.operating_state {
                 return;
             }
-            let mut txpool = self.mempool_buf.lock().unwrap();
 
             // TODO :: FIGURE OUT THE RECIPIENT
 
-            let curr_state = self.state.lock().unwrap();
+            let init_state = self.init_state.lock().unwrap();
             let mut peer_vec = Vec::new();
-            for key in curr_state.keys() {
+            for key in init_state.keys() {
                 peer_vec.push(key);
             }
 
             let mut rand_num =  0;
-
+            //println!("Current peer number: {:?}", peer_vec.len());
             while peer_vec[rand_num].eq( &self.address){
                 let mut rng = rand::thread_rng();
                 rand_num =  rng.gen_range(0, peer_vec.len());
             }
+
             let peer_add = peer_vec[rand_num].clone();
-            //println!("Peer address is : {:?}", peer_add);
-            //if curr_state.len() == 2 && count == curr_state.get(&self.address).unwrap().0 + 1{
-            if curr_state.len() == 3{
+            println!("Peer address is : {:?}", peer_add);
+            let current_block_state = self.block_state.lock().unwrap();
+            //println!("HERE");
+            let current_chain = self.blockchain.lock().unwrap();
+            let current_state = current_block_state.get(&current_chain.tail).unwrap();
+            let current_nonce = current_state.get(&self.address).unwrap().0;
+            if init_state.len() >= 2 && count == current_nonce + 1{
+                let mut txpool = self.mempool_buf.lock().unwrap();
                 let trans = Transaction {
                     address: peer_add, // should be recipient address
                     value: 1,
@@ -228,10 +243,12 @@ impl Context {
                 //println!("NEW TX");
                 std::mem::drop(txpool);
             } else {
-                //println!("current peers number {:?}", curr_state.len());
-                println!("current nonce number {:?}", curr_state.get(&self.address).unwrap().0);
+                //println!("current peers number {:?}", init_state.len());
+                println!("current nonce number {:?}", init_state.get(&self.address).unwrap().0);
             }
-            std::mem::drop(curr_state);
+            std::mem::drop(init_state);
+            std::mem::drop(current_chain);
+            std::mem::drop(current_block_state);
 
             let interval = time::Duration::from_micros(1000000);
             thread::sleep(interval);

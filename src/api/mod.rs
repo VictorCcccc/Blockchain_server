@@ -14,8 +14,8 @@ use url::Url;
 
 pub struct Server {
     handle: HTTPServer,
-    miner: MinerHandle,
     generator: GeneratorHandle,
+    miner: MinerHandle,
     network: NetworkServerHandle,
 }
 
@@ -41,21 +41,21 @@ macro_rules! respond_result {
 impl Server {
     pub fn start(
         addr: std::net::SocketAddr,
-        miner: &MinerHandle,
         generator: &GeneratorHandle,
+        miner: &MinerHandle,
         network: &NetworkServerHandle,
     ) {
         let handle = HTTPServer::http(&addr).unwrap();
         let server = Self {
             handle,
-            miner: miner.clone(),
             generator: generator.clone(),
+            miner: miner.clone(),
             network: network.clone(),
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
-                let miner = server.miner.clone();
                 let generator = server.generator.clone();
+                let miner = server.miner.clone();
                 let network = server.network.clone();
                 thread::spawn(move || {
                     // a valid url requires a base
@@ -89,8 +89,8 @@ impl Server {
                                     return;
                                 }
                             };
-                            miner.start(lambda);
                             generator.start(lambda);
+                            miner.start(lambda);
                             respond_result!(req, true, "ok");
                         }
                         "/network/ping" => {

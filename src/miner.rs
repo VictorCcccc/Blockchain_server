@@ -120,6 +120,7 @@ impl Context {
     fn miner_loop(&mut self) {
         // main mining loop
         loop {
+
             // check and react to control signals
             match self.operating_state {
                 OperatingState::Paused => {
@@ -145,82 +146,84 @@ impl Context {
             // TODO: actual mining
             let mut chain = self.blockchain.lock().unwrap();
             let mut pool = self.tx_pool.lock().unwrap();
-            let parent = chain.tip();
+            if pool.buf.len() > 0 {
+                let parent = chain.tip();
 
-            // Generate new block
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("").as_millis();
-            let mut content_new = Content{
-                content: Vec::<SignedTransaction>::new(),
-            };
-            for element in pool.buf.iter() {
-                if content_new.content.len() <= 8 {
-                    content_new.content.push(element.clone());
-                }else{
-                    break;
-                }
-            }
-            if content_new.content.len()==0 {
-                continue;
-            }
-
-            //println!("current block transaction len {:?}", content_new.content.len());
-            //println!("current transaction pool len {:?}", pool.map.len());
-
-            let diff_h256: H256 = hex!("0010000000000000000000000000000000000000000000000000000000000000").into();
-            let rand_nonce: u32 = rand::random();
-            let head_rand = Header{
-                parent_hash: parent,
-                nonce: rand_nonce,
-                difficulty: diff_h256,
-                timestamp: now,
-                merkle_root: MerkleTree::new(&(content_new.content)),
-            };
-
-            let new_block = Block {
-                head: head_rand,
-                content: content_new.clone(),
-            };
-
-            //Calculate block hash
-            let result = new_block.hash();
-            let height = chain.height();
-            if result.le(&new_block.head.difficulty){
-                chain.insert(&new_block);
-                let mut current_block_state = self.block_state.lock().unwrap();
-                let mut current_state = current_block_state.get(&new_block.head.parent_hash).unwrap().clone();
-                let all_hash = chain.all_blocks_in_longest_chain();
-                self.server.broadcast(Message::NewBlockHashes(all_hash));
-                for tx in content_new.content{
-                    let public_hash: H256 = ring::digest::digest(&ring::digest::SHA256, &tx.public_key).into();
-                    let owner_add: H160 = public_hash.into();
-                    //Update sender state (balance, nonce)
-                    let balance = current_state.get(&owner_add).unwrap().1;
-                    current_state.insert(owner_add, (tx.transaction.nonce, balance - tx.transaction.value));
-                    //Update receiver state (balance)
-                    let recipient_balance = current_state.get(&tx.transaction.address).unwrap().1;
-                    let recipient_nonce = current_state.get(&tx.transaction.address).unwrap().0;
-                    current_state.insert(tx.transaction.address, (recipient_nonce, recipient_balance + tx.transaction.value));
-                    // Update tx_pool
-                    pool.pop_tx(&tx);
-                }
-                //Update Block state
-                current_block_state.insert(new_block.hash(), current_state);
-
-                //Check status
-                for key in current_block_state.keys(){
-                    println!("block hash {:?}", key);
-                    let snapshot = current_block_state.get(key).unwrap();
-                    for i in snapshot.keys(){
-                        println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
+                // Generate new block
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("").as_millis();
+                let mut content_new = Content {
+                    content: Vec::<SignedTransaction>::new(),
+                };
+                for element in pool.buf.iter() {
+                    if content_new.content.len() <= 8 {
+                        content_new.content.push(element.clone());
+                    } else {
+                        break;
                     }
                 }
-                println!("Current tx_pool length: {:?}", pool.map.len());
+                if content_new.content.len() == 0 {
+                    continue;
+                }
 
-                //println!("Got one for address{:?}", new_block.content.content[0].public_key);
-                //println!("timestamp of block{:?}", new_block.head.timestamp);
-                println!("Total chain length{:?}", chain.height());
+                //println!("current block transaction len {:?}", content_new.content.len());
+                //println!("current transaction pool len {:?}", pool.map.len());
+
+                let diff_h256: H256 = hex!("0001000000000000000000000000000000000000000000000000000000000000").into();
+                let rand_nonce: u32 = rand::random();
+                let head_rand = Header {
+                    parent_hash: parent,
+                    nonce: rand_nonce,
+                    difficulty: diff_h256,
+                    timestamp: now,
+                    merkle_root: MerkleTree::new(&(content_new.content)),
+                };
+
+                let new_block = Block {
+                    head: head_rand,
+                    content: content_new.clone(),
+                };
+
+                //Calculate block hash
+                let result = new_block.hash();
+                let height = chain.height();
+                if result.le(&new_block.head.difficulty) {
+                    chain.insert(&new_block);
+                    let mut current_block_state = self.block_state.lock().unwrap();
+                    let mut current_state = current_block_state.get(&new_block.head.parent_hash).unwrap().clone();
+                    let all_hash = chain.all_blocks_in_longest_chain();
+                    self.server.broadcast(Message::NewBlockHashes(all_hash));
+                    for tx in content_new.content {
+                        let public_hash: H256 = ring::digest::digest(&ring::digest::SHA256, &tx.public_key).into();
+                        let owner_add: H160 = public_hash.into();
+                        //Update sender state (balance, nonce)
+                        let balance = current_state.get(&owner_add).unwrap().1;
+                        current_state.insert(owner_add, (tx.transaction.nonce, balance - tx.transaction.value));
+                        //Update receiver state (balance)
+                        let recipient_balance = current_state.get(&tx.transaction.address).unwrap().1;
+                        let recipient_nonce = current_state.get(&tx.transaction.address).unwrap().0;
+                        current_state.insert(tx.transaction.address, (recipient_nonce, recipient_balance + tx.transaction.value));
+                        // Update tx_pool
+                        pool.pop_tx(&tx);
+                    }
+                    //Update Block state
+                    current_block_state.insert(new_block.hash(), current_state);
+
+                    //Check status
+
+                    let snapshot = current_block_state.get(&chain.tail).unwrap();
+                    for i in snapshot.keys() {
+                        println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
+                    }
+
+                    //println!("Current tx_pool length: {:?}", pool.map.len());
+
+                    //println!("Got one for address{:?}", new_block.content.content[0].public_key);
+                    //println!("timestamp of block{:?}", new_block.head.timestamp);
+                    println!("Total chain length{:?}", chain.height());
+                }
             }
             std::mem::drop(pool);
+            std::mem::drop(chain);
 
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {

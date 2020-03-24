@@ -119,7 +119,7 @@ pub fn new(
     address: H160,
     block_state: &Arc<Mutex<HashMap<H256,HashMap<H160,(u32,u32)>>>>,
 ) -> Context {
-    let block = blockchain.clone();
+    let blockchain = blockchain.clone();
     let mempool_buf = tx_pool.clone();
     let init_state = init_state.clone();
     let mut block_state = block_state.clone();
@@ -127,7 +127,7 @@ pub fn new(
         msg_chan: msg_src,
         num_worker,
         server: server.clone(),
-        blockchain: block,
+        blockchain: blockchain,
         orphanBuf: orphanBuf.clone(),
         tx_pool: mempool_buf,
         init_state: init_state,
@@ -267,9 +267,10 @@ impl Context {
                         //println!("Current account nonce is {:?}", tx.transaction.nonce);
 
                         if flag{
-                            println!("VALID");
                             current_pool.push_tx(&tx);
                             verified_tx.push(tx.hash());
+                        }else{
+                            println!("Transaction invalid");
                         }
 
                     }
@@ -363,13 +364,14 @@ impl Context {
                                         //Update Block_state
                                         curr_block_state.insert(newBlock.hash(),current_state);
 
-                                        for key in curr_block_state.keys(){
-                                            println!("block hash {:?}", key);
-                                            let snapshot = curr_block_state.get(key).unwrap();
-                                            for i in snapshot.keys(){
-                                                println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
-                                            }
+                                        //View current properties
+                                        let snapshot = curr_block_state.get(&current_chain.tail).unwrap();
+                                        for i in snapshot.keys(){
+                                            println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
                                         }
+
+                                    }else{
+                                        println!("Block invalid");
                                     }
                                     //let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("").as_millis();
                                     //println!("Delay{:?}",now-block.head.timestamp);

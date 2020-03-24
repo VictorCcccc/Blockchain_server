@@ -101,6 +101,8 @@ fn main() {
         &new_txpool,
         key,
         &state,
+        &block_state,
+        &new_chain,
     );
     txpool_ctx.start();
 
@@ -170,8 +172,8 @@ fn main() {
     // start the API server
     ApiServer::start(
         api_addr,
-        &miner,
         &generator,
+        &miner,
         &server,
     );
 
