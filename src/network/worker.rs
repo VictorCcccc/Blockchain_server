@@ -56,6 +56,7 @@ impl OrphanBuffer{
         for key in curr_buf.clone().keys(){
             if curr_chain.chain.contains_key(key){
                 for block in curr_buf.clone().get(key).unwrap() {
+                    // TODO: State is determined by block's parent
                     let parent_state = current_block_state.get(&block.head.parent_hash).unwrap();
                     //Check tx
                     let mut flag = true;
@@ -97,6 +98,20 @@ impl OrphanBuffer{
                         }
                         //Update Block state
                         current_block_state.insert(block.hash(), current_state);
+
+                        //View current properties
+                        let snapshot = current_block_state.get(&curr_chain.tail).unwrap();
+                        println!("Current state");
+                        for i in snapshot.keys(){
+                            println!("Peer address: {:?}, properties (nonce, balance) {:?}", i, snapshot.get(i).unwrap());
+                        }
+                        println!("---------------------");
+                        println!("Total chain length: {:?}", curr_chain.height()+1);
+                        println!("---------------------");
+                        println!("Longest chain blocks hash");
+                        println!("Blocks : {:?}", curr_chain.all_blocks_in_longest_chain());
+                        println!("---------------------");
+
                     }
                     //let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("").as_millis();
                     //println!("Delay{:?}",now-block.head.timestamp);
@@ -198,11 +213,14 @@ impl Context {
 
                     //check status
                     for key in init_block_state.keys(){
-                        println!("Genesis block hash {:?}", key);
+                        //println!("Genesis block hash {:?}", key);
                         let snapshot = init_block_state.get(key).unwrap();
+                        println!("Current process address is : {:?}", self.address);
+
                         for i in snapshot.keys(){
-                            println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
+                            println!("Process address is: {:?}, ICO properties (nonce, balance) is:{:?}", i, snapshot.get(i).unwrap());
                         }
+                        println!("---------------------");
                     }
                 }
                 Message::NewTransactionHashes(NewTransactionHashes) =>{
@@ -237,12 +255,13 @@ impl Context {
                     }
                 }
                 Message::Transactions(Transactions) =>{
+                    // TODO: State of current chain is always determined by tip of chain
                     let mut current_state = curr_block_state.get(&current_chain.tail).unwrap();
                     //debug!("Transactions");
                     let mut verified_tx = Vec::new();
                     //println!("Receive new tx : {:?} ", Transactions.len());
                     for tx in Transactions{
-                        // TODO:: CHECK HERE
+                        // TODO: Transaction check
                         // 1. Check signature : transaction.verify() true/false
                         let mut flag = true;
                         let public_hash: H256 = ring::digest::digest(&ring::digest::SHA256, &tx.public_key).into();
@@ -264,7 +283,6 @@ impl Context {
                             flag = false;
                             println!("Mismatch account nonce");
                         }
-                        //println!("Current account nonce is {:?}", tx.transaction.nonce);
 
                         if flag{
                             current_pool.push_tx(&tx);
@@ -366,9 +384,16 @@ impl Context {
 
                                         //View current properties
                                         let snapshot = curr_block_state.get(&current_chain.tail).unwrap();
+                                        println!("Current state");
                                         for i in snapshot.keys(){
-                                            println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
+                                            println!("Peer address: {:?}, properties (nonce, balance) {:?}", i, snapshot.get(i).unwrap());
                                         }
+                                        println!("---------------------");
+                                        println!("Total chain length: {:?}", current_chain.height()+1);
+                                        println!("---------------------");
+                                        println!("Longest chain blocks hash");
+                                        println!("Blocks : {:?}", current_chain.all_blocks_in_longest_chain());
+                                        println!("---------------------");
 
                                     }else{
                                         println!("Block invalid");
@@ -378,7 +403,7 @@ impl Context {
                                 }else{
                                     // Add Orphan to buffer
                                     orphan_buffer.addOrphan(&newBlock);
-                                    //println!("Found Orphan!");
+                                    println!("Found Orphan!");
                                 }
                             }
                         }

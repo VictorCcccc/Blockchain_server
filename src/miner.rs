@@ -143,7 +143,6 @@ impl Context {
                 return;
             }
 
-            // TODO: actual mining
             let mut chain = self.blockchain.lock().unwrap();
             let mut pool = self.tx_pool.lock().unwrap();
             if pool.buf.len() > 0 {
@@ -154,6 +153,8 @@ impl Context {
                 let mut content_new = Content {
                     content: Vec::<SignedTransaction>::new(),
                 };
+
+                // TODO: Add transactions into Block
                 for element in pool.buf.iter() {
                     if content_new.content.len() <= 8 {
                         content_new.content.push(element.clone());
@@ -164,10 +165,9 @@ impl Context {
                 if content_new.content.len() == 0 {
                     continue;
                 }
-
                 //println!("current block transaction len {:?}", content_new.content.len());
                 //println!("current transaction pool len {:?}", pool.map.len());
-
+                // TODO: Generate new block
                 let diff_h256: H256 = hex!("0001000000000000000000000000000000000000000000000000000000000000").into();
                 let rand_nonce: u32 = rand::random();
                 let head_rand = Header {
@@ -188,10 +188,14 @@ impl Context {
                 let height = chain.height();
                 if result.le(&new_block.head.difficulty) {
                     chain.insert(&new_block);
+                    info!("Find new block");
+                    info!("Length of transactions in this block {:?}", content_new.content.len());
+                    println!("Block hash : {:?}", new_block.clone().hash());
+                    println!("---------------------");
                     let mut current_block_state = self.block_state.lock().unwrap();
                     let mut current_state = current_block_state.get(&new_block.head.parent_hash).unwrap().clone();
                     let all_hash = chain.all_blocks_in_longest_chain();
-                    self.server.broadcast(Message::NewBlockHashes(all_hash));
+                    self.server.broadcast(Message::NewBlockHashes(all_hash.clone()));
                     for tx in content_new.content {
                         let public_hash: H256 = ring::digest::digest(&ring::digest::SHA256, &tx.public_key).into();
                         let owner_add: H160 = public_hash.into();
@@ -209,17 +213,16 @@ impl Context {
                     current_block_state.insert(new_block.hash(), current_state);
 
                     //Check status
-
+                    println!("Total chain length: {:?}", all_hash.clone().len());
+                    println!("---------------------");
+                    println!("Longest chain blocks hash");
+                    println!("Blocks : {:?}", all_hash.clone());
+                    println!("---------------------");
                     let snapshot = current_block_state.get(&chain.tail).unwrap();
                     for i in snapshot.keys() {
-                        println!("address {:?}, properties {:?}", i, snapshot.get(i).unwrap());
+                        println!("Peer address: {:?}, properties (nonce, balance): {:?}", i, snapshot.get(i).unwrap());
                     }
-
-                    //println!("Current tx_pool length: {:?}", pool.map.len());
-
-                    //println!("Got one for address{:?}", new_block.content.content[0].public_key);
-                    //println!("timestamp of block{:?}", new_block.head.timestamp);
-                    println!("Total chain length{:?}", chain.height());
+                    println!("---------------------");
                 }
             }
             std::mem::drop(pool);
